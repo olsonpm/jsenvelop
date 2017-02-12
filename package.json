@@ -1,0 +1,27 @@
+{
+  "name": "jsenvelop",
+  "version": "0.1.0",
+  "description": "A personal project aimed at bundling javascript just like webpack, browserify, etc.",
+  "browser": "es6-browser.js",
+  "main": "es6.js",
+  "scripts": {
+    "test": "node_modules/mocha/bin/mocha --ui tdd test",
+    "test-fxns": "node_modules/mocha/bin/mocha --ui tdd test/fxns",
+    "test-resolvers": "node_modules/mocha/bin/mocha --ui tdd test/resolvers"
+  },
+  "author": "phil olson",
+  "license": "WTFPL",
+  "devDependencies": {
+    "bluebird": "^3.4.7",
+    "chai": "^3.5.0",
+    "chai-as-promised": "^6.0.0",
+    "lodash.clonedeep": "^4.5.0",
+    "mocha": "^3.2.0"
+  },
+  "dependencies": {
+    "deep-eql": "^2.0.1",
+    "lodash.curry": "^4.1.1",
+    "lodash.kebabcase": "^4.1.1",
+    "pify": "^2.3.0"
+  }
+}
