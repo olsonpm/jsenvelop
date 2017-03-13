@@ -5,52 +5,64 @@
 // Imports //
 //---------//
 
-const bPromise = require('bluebird')
-  , chai = require('chai')
+const chai = require('chai')
   , chaiAsPromised = require('chai-as-promised')
   , cloneDeep = require('lodash.clonedeep')
   , curry = require('lodash.curry')
   , deepEql = require('deep-eql') // necessary until chai v4 releases
+  , delay = require('delay')
+  , kebabCase = require('lodash.kebabcase')
   , mMap = require('../lib/fxns/m-map')
   ;
 
 const [
-    all, any, containedIn, contains, curryN, discardWhen, discard
-    , dropRightWhile, dropWhile, each, filter, findFirst, findFirstKeyValPair
-    , flatten, getElementAt, hasElementAt, head, initial, join, last, map
-    , mMapAccum, mMerge, omitWhen, omit, pipe, reduceFirst, reduceFresh, reduce
-    , reject, separate, tail, take, typeCaller, type, unique, utils
+    all, alwaysReturn, any, arrayOfKeys, arrayOfValues, containedIn, contains
+    , createEmpty, curryN, discard, discardWhen, discardFirst, discardLast
+    , discardLastWhile, discardFirstWhile, each, findFirstResult, findFirstValue
+    , flatten, flip, get, getElementAt, getFrom, hasElementAt, hasKey, head
+    , identity, initial, isType, join, keep, keepFirst, keepWhen, last, map
+    , mapKeys, merge, mMapAccum, mMerge, mSet, mUnset, nthArg, omit, omitWhen
+    , passThrough, pFindFirstResult, pFindFirstValue, ph, pick, pickWhen, pipe
+    , reduceFirst, reduceFresh, reduce, reverse, separate, shallowClone, size
+    , tail, take, toPairs, toWrittenList, transform, transformArgs, typeCaller
+    , type, unique, uniqueById, utils, zipTo
   ] = requireAll([
-    'all', 'any', 'contained-in', 'contains', 'curry-n', 'discard-when'
-    , 'discard', 'drop-right-while', 'drop-while', 'each', 'filter'
-    , 'find-first', 'find-first-key-val-pair', 'flatten', 'get-element-at'
-    , 'has-element-at', 'head', 'initial', 'join', 'last', 'map', 'm-map-accum'
-    , 'm-merge', 'omit-when', 'omit', 'pipe', 'reduce-first', 'reduce-fresh'
-    , 'reduce', 'reject', 'separate', 'tail', 'take', 'type-caller', 'type'
-    , 'unique', 'utils'
+    'all', 'alwaysReturn', 'any', 'arrayOfKeys', 'arrayOfValues', 'containedIn'
+    , 'contains', 'createEmpty', 'curryN', 'discard', 'discardWhen'
+    , 'discardFirst', 'discardLast', 'discardLastWhile', 'discardFirstWhile'
+    , 'each', 'findFirstResult', 'findFirstValue', 'flatten', 'flip', 'get'
+    , 'getElementAt', 'getFrom', 'hasElementAt', 'hasKey', 'head', 'identity'
+    , 'initial', 'isType', 'join', 'keep', 'keepFirst', 'keepWhen', 'last'
+    , 'map', 'mapKeys', 'merge', 'mMapAccum', 'mMerge', 'mSet', 'mUnset'
+    , 'nthArg', 'omit', 'omitWhen', 'passThrough', 'pFindFirstResult'
+    , 'pFindFirstValue', 'ph', 'pick', 'pickWhen', 'pipe', 'reduceFirst'
+    , 'reduceFresh', 'reduce', 'reverse', 'separate', 'shallowClone', 'size'
+    , 'tail', 'take', 'toPairs', 'toWrittenList', 'transform', 'transformArgs'
+    , 'typeCaller', 'type', 'unique', 'uniqueById', 'utils', 'zipTo'
   ]);
 
 const {
-  adhere, adhereEach, adhereOwnEnumerable, alwaysReturn, apply, eachOffset, flip
-  , get, getAtPath, getEq, getFirst, getFrom, hasKey, hasPath, ifFalse
-  , ifThenTransform, invoke, invokeWith, is, isDefined, isEmpty, isLaden, isType
-  , isUndefined, keys, mSet, noop, not, pCatch, ph, setAtPath, size
-  , strictEquals, then, toBoolean, values
+  adhere, adhereEach, adhereOwnEnumerable, apply, construct, constructN1
+  , eachOffset, fromPairs, getAtPath, getEq, getOr, hasPath, ifFalse
+  , ifThenTransform, invoke, invokeAtPath, invokeAtPathWith, invokeWith, is
+  , isDefined, isEmpty, isLaden, isUndefined, noop, not, pAllSettled, pCatch
+  , pProps, pPropsSettled, pReflect, pReject, pResolve, setAtPath, strictEquals
+  , then, toBoolean
 } = utils;
 
 const {
-  concat, mAppend, mAppendTo, mPrepend, mPrependTo
+  concat, frontmostResolvedPromise, mAppend, mAppendAll, mAppendAllTo, mAppendTo
+  , mModifyAt, mPrepend, mPrependAll, mPrependAllTo, mPrependTo, mRemoveAt
 } = require('../lib/fxns/array');
 
 const {
-  allCharsEq, append, endsWith, prepend, startsWith, trim, trimEnd, trimStart
+  allCharsEq, append, endsWith, isMatch, prepend, repeat, startsWith, trimChar
+  , trimEndChar, trimEndWhile, trimStartChar, trimStartWhile, trimWhile, wrap
 } = require('../lib/fxns/string');
 
 const {
   hasNoCase, isLowercase, isUppercase
 } = require('../lib/fxns/character');
-
-const { findFirstValueIn } = require('../lib/fxns/set');
 
 
 //------//
@@ -59,7 +71,10 @@ const { findFirstValueIn } = require('../lib/fxns/set');
 
 chai.use(chaiAsPromised);
 chai.should();
-const expect = chai.expect;
+
+const expect = chai.expect
+  , inc = x => x + 1
+  ;
 
 
 //------//
@@ -84,6 +99,13 @@ suite('fxns', () => {
       all(eq1, new Set([2])).should.be.false;
     });
 
+    test('alwaysReturn', () => {
+      const obj = {};
+      expect(alwaysReturn()()).to.be.undefined;
+      alwaysReturn(1)().should.equal(1);
+      alwaysReturn(obj)().should.equal(obj);
+    });
+
     test('any', () => {
       const eq1 = strictEquals(1);
       any(eq1, { one: 1, two: 2 }).should.be.true;
@@ -97,6 +119,17 @@ suite('fxns', () => {
 
       any(eq1, new Set([1, 2])).should.be.true;
       any(eq1, new Set([2])).should.be.false;
+    });
+
+    test('arrayOfKeys', () => {
+      arrayOfKeys({ one: 1 }).should.deep.equal(['one']);
+      arrayOfKeys(new Map([['one', 1]])).should.deep.equal(['one']);
+    });
+
+    test('arrayOfValues', () => {
+      arrayOfValues({ one: 1, two: 2 }).should.deep.equal([1, 2]);
+      arrayOfValues(new Map([['one', 1], ['two', 2]])).should.deep.equal([1, 2]);
+      arrayOfValues(new Set([1, 2])).should.deep.equal([1, 2]);
     });
 
     test('containedIn', () => {
@@ -127,6 +160,11 @@ suite('fxns', () => {
       contains(1, new Set([2])).should.be.false;
     });
 
+    test('createEmpty', () => {
+      createEmpty('Object')().should.deep.equal({});
+      createEmpty('Array')().should.deep.equal([]);
+    });
+
     test('curryN', () => {
       const returnArgArray = curryN(
         2
@@ -154,30 +192,79 @@ suite('fxns', () => {
     });
 
     test('discardWhen', () => {
-      const discardOddNumbers = discardWhen(isOdd);
+      const argCollector = createArgCollector()
+        , wrappedIsOdd = argCollector.wrap(isOdd);
 
-      discardOddNumbers({ one: 1, two: 2, three: 3 }).should.deep.equal({ two: 2 });
-      discardOddNumbers([1, 2, 3]).should.deep.equal([2]);
+      const theObject = { one: 1, two: 2, three: 3 };
+      discardWhen(wrappedIsOdd, theObject).should.deep.equal({ two: 2 });
 
+      argCollector.extractArgsPerCall().should.deep.equal([
+        [1, 'one', theObject]
+        , [2, 'two', theObject]
+        , [3, 'three', theObject]
+      ]);
+
+
+      const theMap = new Map([['one', 1], ['two', 2], ['three', 3]]);
       deepEql(
-        discardOddNumbers(new Map([['one', 1], ['two', 2], ['three', 3]]))
+        discardWhen(wrappedIsOdd, theMap)
         , new Map([['two', 2]])
       ).should.be.true;
 
       deepEql(
-        discardOddNumbers(new Set([1, 2, 3]))
+        argCollector.extractArgsPerCall()
+        , [
+          [1, 'one', theMap]
+          , [2, 'two', theMap]
+          , [3, 'three', theMap]
+        ]
+      ).should.be.true;
+
+
+      const theArray = [1, 2, 3];
+      discardWhen(wrappedIsOdd, theArray).should.deep.equal([2]);
+
+      argCollector.extractArgsPerCall().should.deep.equal([
+        [1, 0, theArray]
+        , [2, 1, theArray]
+        , [3, 2, theArray]
+      ]);
+
+
+      const theSet = new Set([1, 2, 3]);
+      deepEql(
+        discardWhen(wrappedIsOdd, theSet)
         , new Set([2])
+      ).should.be.true;
+
+      deepEql(
+        argCollector.extractArgsPerCall()
+        , [
+          [1, 1, theSet]
+          , [2, 2, theSet]
+          , [3, 3, theSet]
+        ]
       ).should.be.true;
     });
 
-    test('dropRightWhile', () => {
-      dropRightWhile(isOdd, [2, 1, 3]).should.deep.equal([2]);
-      dropRightWhile(isUppercase, 'aaaAAA').should.equal('aaa');
+    test('discardFirst', () => {
+      discardFirst(2, [1, 2, 3]).should.deep.equal([3]);
+      discardFirst(2, '123').should.equal('3');
     });
 
-    test('dropWhile', () => {
-      dropWhile(isOdd, [1, 3, 2]).should.deep.equal([2]);
-      dropWhile(isLowercase, 'aaaAAA').should.equal('AAA');
+    test('discardLast', () => {
+      discardLast(2, [1, 2, 3]).should.deep.equal([1]);
+      discardLast(2, '123').should.equal('1');
+    });
+
+    test('discardLastWhile', () => {
+      discardLastWhile(isOdd, [2, 1, 3]).should.deep.equal([2]);
+      discardLastWhile(isUppercase, 'aaaAAA').should.equal('aaa');
+    });
+
+    test('discardFirstWhile', () => {
+      discardFirstWhile(isOdd, [1, 3, 2]).should.deep.equal([2]);
+      discardFirstWhile(isLowercase, 'aaaAAA').should.equal('AAA');
     });
 
     test('each', () => {
@@ -249,134 +336,45 @@ suite('fxns', () => {
       ).should.be.true;
     });
 
-    test('filter', () => {
-      const argCollector = createArgCollector()
-        , wrappedIsOdd = argCollector.wrap(isOdd);
+    test('findFirstResult', () => {
+      const virtualFs = {
+          '/index.json': '{ "some": "json" }'
+        }
+        , readVirtualFile = getFrom(virtualFs)
+        ;
 
-      const theObject = { one: 1, two: 2, three: 3 };
-      filter(wrappedIsOdd, theObject).should.deep.equal({ one: 1, three: 3 });
-
-      argCollector.extractArgsPerCall().should.deep.equal([
-        [1, 'one', theObject]
-        , [2, 'two', theObject]
-        , [3, 'three', theObject]
+      //
+      // seems familiar?  See the section LOAD_AS_FILE
+      // https://nodejs.org/api/modules.html#modules_all_together
+      //
+      const mapOfOrderedFilesToTry = new Map([
+        ['no extension', '/index']
+        , ['.js', '/index.js']
+        , ['.json', '/index.json']
       ]);
+      findFirstResult(readVirtualFile, mapOfOrderedFilesToTry)
+        .should.equal('{ "some": "json" }');
 
+      const arrayOfOrderedFilesToTry = ['/index', '/index.js', '/index.json'];
+      findFirstResult(readVirtualFile, arrayOfOrderedFilesToTry)
+        .should.equal('{ "some": "json" }');
 
-      const theMap = new Map([['one', 1], ['two', 2], ['three', 3]]);
-
-      deepEql(
-        filter(wrappedIsOdd, theMap)
-        , new Map([['one', 1], ['three', 3]])
-      ).should.be.true;
-
-      deepEql(
-        argCollector.extractArgsPerCall()
-        , [
-          [1, 'one', theMap]
-          , [2, 'two', theMap]
-          , [3, 'three', theMap]
-        ]
-      ).should.be.true;
-
-
-      const theArray = [1, 2, 3];
-      filter(wrappedIsOdd, theArray).should.deep.equal([1, 3]);
-
-      argCollector.extractArgsPerCall().should.deep.equal([
-        [1, 0, theArray]
-        , [2, 1, theArray]
-        , [3, 2, theArray]
-      ]);
-
-
-      const theSet = new Set([1, 2, 3]);
-      deepEql(
-        filter(wrappedIsOdd, theSet)
-        , new Set([1, 3])
-      ).should.be.true;
-
-      deepEql(
-        argCollector.extractArgsPerCall()
-        , [
-          [1, 1, theSet]
-          , [2, 2, theSet]
-          , [3, 3, theSet]
-        ]
-      ).should.be.true;
+      const setOfOrderedFilesToTry = new Set(
+        ['/index', '/index.js', '/index.json']
+      );
+      findFirstResult(readVirtualFile, setOfOrderedFilesToTry)
+        .should.equal('{ "some": "json" }');
     });
 
-    test('findFirst', () => {
-      const argCollector = createArgCollector()
-        , wrappedIsOdd = argCollector.wrap(isOdd);
+    test('findFirstValue', () => {
+      const aMap = new Map([['one', 1], ['two', 2], ['three', 3]]);
+      findFirstValue(isEven, aMap).should.equal(2);
 
-      const theObject = { one: 1, two: 2, three: 3 };
-      findFirst(wrappedIsOdd, theObject).should.equal(1);
+      const arr = [1, 2, 3];
+      findFirstValue(isEven, arr).should.equal(2);
 
-      argCollector.extractArgsPerCall().should.deep.equal([
-        [1, 'one', theObject]
-      ]);
-
-
-      const theMap = new Map([['one', 1], ['two', 2], ['three', 3]]);
-      findFirst(wrappedIsOdd, theMap).should.equal(1);
-
-      deepEql(
-        argCollector.extractArgsPerCall()
-        , [
-          [1, 'one', theMap]
-        ]
-      ).should.be.true;
-
-
-      const theArray = [1, 2, 3];
-      findFirst(wrappedIsOdd, theArray).should.equal(1);
-
-      argCollector.extractArgsPerCall().should.deep.equal([
-        [1, 0, theArray]
-      ]);
-
-
-      const theSet = new Set([1, 2, 3]);
-      findFirst(wrappedIsOdd, theSet).should.equal(1);
-
-      deepEql(
-        argCollector.extractArgsPerCall()
-        , [
-          [1, 1, theSet]
-        ]
-      ).should.be.true;
-    });
-
-    test('findFirstKeyValPair', () => {
-      const argCollector = createArgCollector()
-        , wrappedIsOdd = argCollector.wrap(isOdd);
-
-      const theObject = { one: 1, two: 2, three: 3 };
-      findFirstKeyValPair(wrappedIsOdd, theObject).should.deep.equal(['one', 1]);
-
-      argCollector.extractArgsPerCall().should.deep.equal([
-        [1, 'one', theObject]
-      ]);
-
-
-      const theMap = new Map([['one', 1], ['two', 2], ['three', 3]]);
-      findFirstKeyValPair(wrappedIsOdd, theMap).should.deep.equal(['one', 1]);
-
-      deepEql(
-        argCollector.extractArgsPerCall()
-        , [
-          [1, 'one', theMap]
-        ]
-      ).should.be.true;
-
-
-      const theArray = [1, 2, 3];
-      findFirstKeyValPair(wrappedIsOdd, theArray).should.deep.equal([0, 1]);
-
-      argCollector.extractArgsPerCall().should.deep.equal([
-        [1, 0, theArray]
-      ]);
+      const aSet = new Set([1, 2, 3]);
+      findFirstValue(isEven, aSet).should.equal(2);
     });
 
     test('flatten', () => {
@@ -385,12 +383,37 @@ suite('fxns', () => {
       flatten([1, [[2]], 3]).should.deep.equal([1, [2], 3]);
     });
 
+    test('flip', () => {
+      const myConcat = (left, right) => left.concat(right)
+        , myPrepend = flip(myConcat);
+
+      myPrepend([1], [2]).should.deep.equal([2, 1]);
+    });
+
+    test('get', () => {
+      const person = {
+        name: 'matt'
+      };
+      get('name', person).should.equal('matt');
+      expect(get("doesn't exist", person)).to.be.undefined;
+      expect(get('name', undefined)).to.be.undefined;
+    });
+
     test('getElementAt', () => {
       getElementAt('one', new Map([['one', 1]])).should.equal(1);
       getElementAt(0, [0]).should.equal(0);
       expect(
         () => getElementAt('zero', [0])
       ).to.throw('getElementAt for an array requires idx to parse as an integer');
+    });
+
+    test('getFrom', () => {
+      const person = {
+        name: 'matt'
+      };
+      getFrom(person, 'name').should.equal('matt');
+      expect(getFrom(undefined, 'name')).to.be.undefined;
+      expect(getFrom(person, "doesn't exist")).to.be.undefined;
     });
 
     test('hasElementAt', () => {
@@ -404,6 +427,18 @@ suite('fxns', () => {
       expect(
         () => hasElementAt('zero', [0])
       ).to.throw('hasElementAt for an array requires idx to parse as an integer');
+    });
+
+    test('hasKey', () => {
+      const person = {
+        name: 'matt'
+      };
+      hasKey('name', person).should.be.true;
+      hasKey("doesn't exist", person).should.be.false;
+
+      // doesn't have to be enumerable
+      hasKey('toString', true).should.be.true;
+      hasKey("doesn't exist", true).should.be.false;
     });
 
     test('head', () => {
@@ -422,9 +457,93 @@ suite('fxns', () => {
       initial('').should.equal('');
     });
 
+    test('isType', () => {
+      isType('String', '1').should.be.true;
+      isType('String', 1).should.be.false;
+      isType('Number', 1).should.be.true;
+    });
+
     test('join', () => {
       join(', ', [1, 2, 3]).should.equal('1, 2, 3');
       join(', ', new Set([1, 2, 3])).should.equal('1, 2, 3');
+    });
+
+    test('keep', () => {
+      const keep1 = keep(new Set([1]));
+      keep1({ one: 1, two: 2 }).should.deep.equal({ one: 1 });
+      keep1([1, 2]).should.deep.equal([1]);
+
+      deepEql(
+        keep1(new Map([['one', 1], ['two', 2]]))
+        , new Map([['one', 1]])
+      ).should.be.true;
+
+      deepEql(
+        keep1(new Set([1, 2]))
+        , new Set([1])
+      ).should.be.true;
+    });
+
+    test('keepFirst', () => {
+      keepFirst(2, [1, 2, 3]).should.deep.equal([1, 2]);
+      keepFirst(2, '123').should.equal('12');
+    });
+
+    test('keepWhen', () => {
+      const argCollector = createArgCollector()
+        , wrappedIsOdd = argCollector.wrap(isOdd);
+
+      const theObject = { one: 1, two: 2, three: 3 };
+      keepWhen(wrappedIsOdd, theObject).should.deep.equal({ one: 1, three: 3 });
+
+      argCollector.extractArgsPerCall().should.deep.equal([
+        [1, 'one', theObject]
+        , [2, 'two', theObject]
+        , [3, 'three', theObject]
+      ]);
+
+
+      const theMap = new Map([['one', 1], ['two', 2], ['three', 3]]);
+
+      deepEql(
+        keepWhen(wrappedIsOdd, theMap)
+        , new Map([['one', 1], ['three', 3]])
+      ).should.be.true;
+
+      deepEql(
+        argCollector.extractArgsPerCall()
+        , [
+          [1, 'one', theMap]
+          , [2, 'two', theMap]
+          , [3, 'three', theMap]
+        ]
+      ).should.be.true;
+
+
+      const theArray = [1, 2, 3];
+      keepWhen(wrappedIsOdd, theArray).should.deep.equal([1, 3]);
+
+      argCollector.extractArgsPerCall().should.deep.equal([
+        [1, 0, theArray]
+        , [2, 1, theArray]
+        , [3, 2, theArray]
+      ]);
+
+
+      const theSet = new Set([1, 2, 3]);
+      deepEql(
+        keepWhen(wrappedIsOdd, theSet)
+        , new Set([1, 3])
+      ).should.be.true;
+
+      deepEql(
+        argCollector.extractArgsPerCall()
+        , [
+          [1, 1, theSet]
+          , [2, 2, theSet]
+          , [3, 3, theSet]
+        ]
+      ).should.be.true;
     });
 
     test('last', () => {
@@ -489,7 +608,69 @@ suite('fxns', () => {
       ]);
     });
 
-    test('m-map', () => {
+    test('mapKeys', () => {
+      //
+      // Map
+      //
+      const argCollector = createArgCollector()
+        , englishToSpanish = {
+          one: 'uno'
+          , two: 'dos'
+        }
+        , wrappedEnglishToSpanish = argCollector.wrap(getFrom(englishToSpanish))
+        , theMap = new Map([['one', 1], ['two', 2]])
+        ;
+
+      deepEql(
+        mapKeys(wrappedEnglishToSpanish, theMap)
+        , new Map([['uno', 1], ['dos', 2]])
+      ).should.be.true;
+
+      deepEql(
+        theMap
+        , new Map([['one', 1], ['two', 2]])
+      ).should.be.true;
+
+      deepEql(
+        argCollector.extractArgsPerCall()
+        , [
+          ['one', 1, theMap]
+          , ['two', 2, theMap]
+        ]
+      ).should.be.true;
+
+      //
+      // Object
+      //
+      const theObject = { one: 1, two: 2 };
+
+      mapKeys(wrappedEnglishToSpanish, theObject).should.deep.equal({ uno: 1, dos: 2 });
+      theObject.should.deep.equal({ one: 1, two: 2 });
+
+      argCollector.extractArgsPerCall().should.deep.equal([
+        ['one', 1, theObject]
+        , ['two', 2, theObject]
+      ]);
+    });
+
+    test('merge', () => {
+      let target = { one: 2, three: 3 };
+      merge(target, { one: 1, two: 2 })
+        .should.deep.equal({ one: 1, two: 2, three: 3 });
+
+      target.should.deep.equal({ one: 2, three: 3 });
+
+      target = new Map([['one', 2], ['three', 3]]);
+      deepEql(
+        merge(target, new Map([['one', 1], ['two', 2]]))
+        , new Map([['one', 1], ['two', 2], ['three', 3]])
+      ).should.be.true;
+
+      deepEql(target, new Map([['one', 2], ['three', 3]]))
+        .should.be.true;
+    });
+
+    test('mMap', () => {
       //
       // Map
       //
@@ -601,6 +782,52 @@ suite('fxns', () => {
       ).should.be.true;
     });
 
+    test('mSet', () => {
+      const obj = {};
+      mSet(
+        'one'
+        , 1
+        , obj
+      ).should.deep.equal({ one: 1 });
+
+      obj.should.deep.equal({ one: 1 });
+    });
+
+    test('mUnset', () => {
+      const obj = { one: 1 };
+      mUnset('one', obj).should.deep.equal({});
+
+      obj.should.deep.equal({});
+    });
+
+    test('nthArg', () => {
+      nthArg(1)('a', 'b').should.equal('a');
+      nthArg(2)('a', 'b').should.equal('b');
+    });
+
+    test('omit', () => {
+      const setOfWrittenEnglishNumbers = new Set(['one', 'three'])
+        , setOfEvenNumbers = new Set([0, 2]);
+
+      omit(
+        setOfWrittenEnglishNumbers
+        , { one: 1, dos: 2, three: 3 }
+      ).should.deep.equal({ dos: 2 });
+
+      deepEql(
+        omit(
+          setOfWrittenEnglishNumbers
+          , new Map([['one', 1], ['dos', 2], ['three', 3]])
+        )
+        , new Map([['dos', 2]])
+      ).should.be.true;
+
+      omit(
+        setOfEvenNumbers
+        , ['zero', 'one', 'two']
+      ).should.deep.equal(['one']);
+    });
+
     test('omitWhen', () => {
       const argCollector = createArgCollector()
         , isEnglishNumber = argCollector.wrap(
@@ -644,47 +871,166 @@ suite('fxns', () => {
       ]);
     });
 
-    test('omit', () => {
+    test('passThrough', () => {
+      const puppyToKitty = str => (str === 'puppy')
+        ? 'kitty'
+        : str;
+
+      passThrough('puppy', [identity]).should.equal('puppy');
+      passThrough(
+        'puppy'
+        , [
+          str => {
+            str.should.equal('puppy');
+            return str;
+          }
+          , puppyToKitty
+        ]
+      ).should.equal('kitty');
+    });
+
+    test('pFindFirstResult', () => {
+      const virtualFs = {
+          '/index.json': '{ "some": "json" }'
+        }
+        , pReadVirtualFile = pipe([getFrom(virtualFs), pResolve])
+        ;
+
+      //
+      // seems familiar?  See the section LOAD_AS_FILE
+      // https://nodejs.org/api/modules.html#modules_all_together
+      //
+      const mapOfOrderedFilesToTry = new Map([
+        ['no extension', '/index']
+        , ['.js', '/index.js']
+        , ['.json', '/index.json']
+      ]);
+      const p1 = pFindFirstResult(pReadVirtualFile, mapOfOrderedFilesToTry)
+        .should.become('{ "some": "json" }');
+
+      const arrayOfOrderedFilesToTry = ['/index', '/index.js', '/index.json'];
+      const p2 = pFindFirstResult(pReadVirtualFile, arrayOfOrderedFilesToTry)
+        .should.become('{ "some": "json" }');
+
+      const setOfOrderedFilesToTry = new Set(
+        ['/index', '/index.js', '/index.json']
+      );
+      const p3 = pFindFirstResult(pReadVirtualFile, setOfOrderedFilesToTry)
+        .should.become('{ "some": "json" }');
+
+      return Promise.all([p1, p2, p3]);
+    });
+
+    test('pFindFirstValue', () => {
+      const pIsEven = num => Promise.resolve(!(num % 2));
+
+      const aMap = new Map([['one', 1], ['two', 2], ['three', 3]]);
+      pFindFirstValue(pIsEven, aMap)
+        .should.eventually.equal(2);
+
+      const arr = [1, 2, 3];
+      pFindFirstValue(pIsEven, arr)
+        .should.eventually.equal(2);
+
+      const aSet = new Set([1, 2, 3]);
+      pFindFirstValue(pIsEven, aSet)
+        .should.eventually.equal(2);
+    });
+
+    test('ph', () => {
+      const subtract = curry(
+          (left, right) => left - right
+        )
+        , subtract2from = subtract(ph, 2);
+
+      subtract2from(3).should.equal(1);
+    });
+
+    test('pick', () => {
       const setOfWrittenEnglishNumbers = new Set(['one', 'three'])
         , setOfEvenNumbers = new Set([0, 2]);
 
-      omit(
+      pick(
         setOfWrittenEnglishNumbers
         , { one: 1, dos: 2, three: 3 }
-      ).should.deep.equal({ dos: 2 });
+      ).should.deep.equal({ one: 1, three: 3 });
 
       deepEql(
-        omit(
+        pick(
           setOfWrittenEnglishNumbers
           , new Map([['one', 1], ['dos', 2], ['three', 3]])
         )
-        , new Map([['dos', 2]])
+        , new Map([['one', 1], ['three', 3]])
       ).should.be.true;
 
-      omit(
+      pick(
         setOfEvenNumbers
         , ['zero', 'one', 'two']
-      ).should.deep.equal(['one']);
+      ).should.deep.equal(['zero', 'two']);
+    });
+
+    test('pickWhen', () => {
+      const argCollector = createArgCollector()
+        , isEnglishNumber = argCollector.wrap(
+          adhere('has', new Set(['one', 'two', 'three']))
+        )
+        , wrappedIsOdd = argCollector.wrap(isOdd);
+
+      const theObject = { one: 1, dos: 2, three: 3};
+      pickWhen(isEnglishNumber, theObject).should.deep.equal({ one: 1, three: 3 });
+
+      argCollector.extractArgsPerCall().should.deep.equal([
+        ['one', 1, theObject]
+        , ['dos', 2, theObject]
+        , ['three', 3, theObject]
+      ]);
+
+
+      const theMap = new Map([['one', 1], ['dos', 2], ['three', 3]]);
+      deepEql(
+        pickWhen(isEnglishNumber, theMap)
+        , new Map([['one', 1], ['three', 3]])
+      ).should.be.true;
+
+      deepEql(
+        argCollector.extractArgsPerCall()
+        , [
+          ['one', 1, theMap]
+          , ['dos', 2, theMap]
+          , ['three', 3, theMap]
+        ]
+      ).should.be.true;
+
+
+      const theArray = ['zero', 'one', 'two'];
+      pickWhen(wrappedIsOdd, theArray).should.deep.equal(['one']);
+
+      argCollector.extractArgsPerCall().should.deep.equal([
+        [0, 'zero', theArray]
+        , [1, 'one', theArray]
+        , [2, 'two', theArray]
+      ]);
     });
 
     test('pipe', () => {
-      const identity = x => x
-        , puppyToKitty = str => (str === 'puppy')
-          ? 'kitty'
-          : str
-        ;
+      const puppyToKitty = str => (str === 'puppy')
+        ? 'kitty'
+        : str;
 
-      pipe([identity], 'puppy').should.equal('puppy');
-      pipe([identity], 'puppy', 'kitty').should.equal('puppy');
+      pipe([])('puppy').should.equal('puppy');
+      pipe([])('puppy', 'kitty').should.equal('puppy');
+      pipe([identity])('puppy').should.equal('puppy');
+      pipe([append])('puppy', 'kitty').should.equal('kittypuppy');
+      pipe([append, identity])('puppy', 'kitty').should.equal('kittypuppy');
       pipe([
-        str => {
-          str.should.equal('puppy');
-          return str;
-        }
-        , puppyToKitty
-        ]
-        , 'puppy'
-      ).should.equal('kitty');
+          str => {
+            str.should.equal('puppy');
+            return str;
+          }
+          , puppyToKitty
+        ])('puppy')
+        .should.equal('kitty')
+        ;
     });
 
     test('reduceFirst', () => {
@@ -765,67 +1111,74 @@ suite('fxns', () => {
       );
     });
 
-    test('reject', () => {
-      const argCollector = createArgCollector()
-        , wrappedIsOdd = argCollector.wrap(isOdd);
-
-      const theObject = { one: 1, two: 2, three: 3 };
-      reject(wrappedIsOdd, theObject).should.deep.equal({ two: 2 });
-
-      argCollector.extractArgsPerCall().should.deep.equal([
-        [1, 'one', theObject]
-        , [2, 'two', theObject]
-        , [3, 'three', theObject]
-      ]);
-
-
-      const theMap = new Map([['one', 1], ['two', 2], ['three', 3]]);
-      deepEql(
-        reject(wrappedIsOdd, theMap)
-        , new Map([['two', 2]])
-      ).should.be.true;
-
-      deepEql(
-        argCollector.extractArgsPerCall()
-        , [
-          [1, 'one', theMap]
-          , [2, 'two', theMap]
-          , [3, 'three', theMap]
-        ]
-      ).should.be.true;
-
-
-      const theArray = [1, 2, 3];
-      reject(wrappedIsOdd, theArray).should.deep.equal([2]);
-
-      argCollector.extractArgsPerCall().should.deep.equal([
-        [1, 0, theArray]
-        , [2, 1, theArray]
-        , [3, 2, theArray]
-      ]);
-
-
-      const theSet = new Set([1, 2, 3]);
-      deepEql(
-        reject(wrappedIsOdd, theSet)
-        , new Set([2])
-      ).should.be.true;
-
-      deepEql(
-        argCollector.extractArgsPerCall()
-        , [
-          [1, 1, theSet]
-          , [2, 2, theSet]
-          , [3, 3, theSet]
-        ]
-      ).should.be.true;
+    test('reverse', () => {
+      reverse([1, 2, 3]).should.deep.equal([3, 2, 1]);
+      reverse('123').should.equal('321');
     });
 
     test('separate', () => {
       separate('/', '/ab/c/').should.deep.equal(['ab', 'c']);
       separate('/', 'ab/c').should.deep.equal(['ab', 'c']);
+      separate('/', '').should.deep.equal([]);
 
       separate(null, [null, 1, 2, null, 3, null]).should.deep.equal([[1, 2], [3]]);
+    });
+
+    test('shallowClone', () => {
+      const arr = [1, 2, 3]
+        , clonedArr = shallowClone(arr)
+        ;
+
+      clonedArr[0] = 0;
+      arr.should.deep.equal([1, 2, 3]);
+      clonedArr.should.deep.equal([0, 2, 3]);
+
+
+      const obj = { my: 'name is slim shady' }
+        , clonedObj = shallowClone(obj)
+        ;
+
+      clonedObj.my = 'name is phil';
+      obj.should.deep.equal({ my: 'name is slim shady' });
+      clonedObj.should.deep.equal({ my: 'name is phil' });
+
+
+      const aMap = new Map([['please', 'stand up']])
+        , clonedMap = shallowClone(aMap)
+        ;
+
+      clonedMap.set('please', 'do the dishes');
+      deepEql(aMap, new Map([['please', 'stand up']]));
+      deepEql(clonedMap, new Map([['please', 'do the dishes']]));
+
+
+      const aSet = new Set([1, 2, 3])
+        , clonedSet = shallowClone(aSet)
+        ;
+
+      clonedSet.delete(3);
+      deepEql(aSet, new Set([1, 2, 3]));
+      deepEql(clonedSet, new Set([1, 2]));
+    });
+
+    test('size', () => {
+      size({}).should.equal(0);
+      size({ one: 1 }).should.equal(1);
+
+      size(new Map()).should.equal(0);
+      size(new Map([['one', 1]])).should.equal(1);
+
+      size([]).should.equal(0);
+      size([1]).should.equal(1);
+
+      size(new Set()).should.equal(0);
+      size(new Set([1])).should.equal(1);
+
+      size('').should.equal(0);
+      size('1').should.equal(1);
+
+      size(undefined).should.equal(0);
+      size(null).should.equal(0);
     });
 
     test('tail', () => {
@@ -841,17 +1194,97 @@ suite('fxns', () => {
       take(2, 'abc').should.equal('ab');
     });
 
+    test('toPairs', () => {
+      toPairs({ one: 1, two: '2' }).should.deep.equal([['one', 1], ['two', '2']]);
+      toPairs(new Map([['one', 1], ['two', '2']])).should.deep.equal([['one', 1], ['two', '2']]);
+    });
+
+    test('toWrittenList', () => {
+      toWrittenList(['Phil']).should.equal('Phil');
+      toWrittenList(['Phil', 'Matt']).should.equal('Phil and Matt');
+      toWrittenList(['Phil', 'Matt', 'Chris'])
+        .should.equal('Phil, Matt and Chris');
+      toWrittenList(['Phil', 'Matt', 'Chris', 'Sam'])
+        .should.equal('Phil, Matt, Chris and Sam');
+
+      toWrittenList(new Set(['Phil'])).should.equal('Phil');
+      toWrittenList(new Set(['Phil', 'Matt'])).should.equal('Phil and Matt');
+      toWrittenList(new Set(['Phil', 'Matt', 'Chris']))
+        .should.equal('Phil, Matt and Chris');
+      toWrittenList(new Set(['Phil', 'Matt', 'Chris', 'Sam']))
+        .should.equal('Phil, Matt, Chris and Sam');
+    });
+
+    test('transform', () => {
+      //
+      // Map
+      //
+      const mapOfTransforms = new Map([
+          ['name', invoke('toUpperCase')]
+          , ['age', inc]
+        ])
+        , theMap = new Map([['name', 'matt'], ['age', 27]])
+        ;
+
+      deepEql(
+        transform(mapOfTransforms, theMap)
+        , new Map([['name', 'MATT'], ['age', 28]])
+      ).should.be.true;
+
+      //
+      // Object
+      //
+      const objOfTransforms = {
+          name: invoke('toUpperCase')
+          , age: inc
+        }
+        , theObj = {
+          name: 'matt'
+          , age: 27
+        }
+        ;
+
+      transform(objOfTransforms, theObj).should.deep.equal({
+        name: 'MATT'
+        , age: 28
+      });
+
+      //
+      // Array
+      //
+      const arrOfTransforms = [invoke('toUpperCase'), inc]
+        , theArr = ['matt', 27]
+        ;
+
+      transform(arrOfTransforms, theArr)
+        .should.deep.equal(['MATT', 28]);
+    });
+
+    test('transformArgs', () => {
+      const argTransforms = {
+          '0': invoke('toUpperCase')
+          , '1': inc
+        }
+        , createPerson = (name, age) => ({ name, age })
+        ;
+
+      transformArgs(argTransforms, createPerson)('matt', 27)
+        .should.deep.equal({
+          name: 'MATT'
+          , age: 28
+        });
+    });
+
     test('typeCaller', () => {
       const getCollectionTypeMapper = () => ({
         Object: alwaysReturn('an object')
         , Array: alwaysReturn('an array')
       });
 
-      const anObjectOrArray = typeCaller(1, getCollectionTypeMapper);
+      const anObjectOrArray = typeCaller('nothin', 1, getCollectionTypeMapper);
 
       anObjectOrArray({}).should.equal('an object');
       anObjectOrArray([]).should.equal('an array');
-      expect(() => anObjectOrArray('')).to.throw(/^invalid type passed/);
     });
 
     test('unique', () => {
@@ -866,6 +1299,50 @@ suite('fxns', () => {
 
       const anArray = [1, 2, 1];
       unique(anArray).should.deep.equal([1, 2]);
+    });
+
+    test('uniqueById', () => {
+      const matt = {
+          name: 'matt'
+          , age: 27
+        }
+        , phil = {
+          name: 'phil'
+          , age: 29
+        }
+        , matt2 = {
+          name: 'matt'
+          , age: 27
+        }
+        , idFn = ({ name, age }) => `name: ${name}, age: ${age}`
+        ;
+      const aMap = new Map([['matt', matt], ['phil', phil], ['matt2', matt2]]);
+      deepEql(
+        uniqueById(idFn, aMap)
+        , new Map([['matt', matt], ['phil', phil]])
+      ).should.be.true;
+
+      const anObj = { matt, phil, matt2 };
+      uniqueById(idFn, anObj).should.deep.equal({ matt, phil });
+
+      const anArray = [matt, phil, matt2];
+      uniqueById(idFn, anArray).should.deep.equal([matt, phil]);
+    });
+
+    test('zipTo', () => {
+      zipTo('Array', ['one', 'two'], [1, 2]).should.deep.equal([
+        ['one', 1], ['two', 2]
+      ]);
+
+      zipTo('Object', ['one', 'two'], [1, 2]).should.deep.equal({
+        one: 1
+        , two: 2
+      });
+
+      deepEql(
+        zipTo('Map', ['one', 'two'], [1, 2])
+        , new Map([['one', 1], ['two', 2]])
+      );
     });
   });
 
@@ -894,10 +1371,52 @@ suite('fxns', () => {
       concat([1], [2]).should.deep.equal([1, 2]);
     });
 
+    test('frontmostResolvedPromise', () => {
+      let secondRan = false
+        , neverRan = false
+        ;
+
+      const res1 = frontmostResolvedPromise([
+          delay(50).then(() => { secondRan = true; return 'second'; })
+          , delay(10, 'first')
+          , delay(100).then(() => { neverRan = true; return 'never'; })
+        ])
+        .then(res => {
+          res.should.equal('second');
+          secondRan.should.be.true;
+          neverRan.should.be.false;
+        });
+
+      const res2 = frontmostResolvedPromise([
+          delay(50).then(() => { secondRan = true; return Promise.reject('second'); })
+          , delay(10, 'first')
+          , delay(100).then(() => { neverRan = true; return 'never'; })
+        ])
+        .then(res => {
+          res.should.equal('first');
+          secondRan.should.be.true;
+          neverRan.should.be.false;
+        });
+
+      return Promise.all([res1, res2]);
+    });
+
     test('mAppend', () => {
       const arrOf1 = [1];
       mAppend(2, arrOf1);
       arrOf1.should.deep.equal([1, 2]);
+    });
+
+    test('mAppendAll', () => {
+      const arrOf1 = [1];
+      mAppendAll([2, 3], arrOf1);
+      arrOf1.should.deep.equal([1, 2, 3]);
+    });
+
+    test('mAppendAllTo', () => {
+      const arrOf1 = [1];
+      mAppendAllTo(arrOf1, [2, 3]);
+      arrOf1.should.deep.equal([1, 2, 3]);
     });
 
     test('mAppendTo', () => {
@@ -906,16 +1425,42 @@ suite('fxns', () => {
       arrOf1.should.deep.equal([1, 2]);
     });
 
+    test('mModifyAt', () => {
+      const arrOf2 = [1, 2];
+      mModifyAt(inc, 0, arrOf2)
+        .should.deep.equal([2, 2]);
+
+      arrOf2.should.deep.equal([2, 2]);
+    });
+
     test('mPrepend', () => {
       const arrOf2 = [2];
       mPrepend(1, arrOf2);
       arrOf2.should.deep.equal([1, 2]);
     });
 
+    test('mPrependAll', () => {
+      const arrOf3 = [3];
+      mPrependAll([1, 2], arrOf3);
+      arrOf3.should.deep.equal([1, 2, 3]);
+    });
+
+    test('mPrependAllTo', () => {
+      const arrOf3 = [3];
+      mPrependAllTo(arrOf3, [1, 2]);
+      arrOf3.should.deep.equal([1, 2, 3]);
+    });
+
     test('mPrependTo', () => {
       const arrOf2 = [2];
       mPrependTo(arrOf2, 1);
       arrOf2.should.deep.equal([1, 2]);
+    });
+
+    test('mRemoveAt', () => {
+      const arr = [1, 2, 3];
+      mRemoveAt(1, arr);
+      arr.should.deep.equal([1, 3]);
     });
   });
 
@@ -936,8 +1481,18 @@ suite('fxns', () => {
       expect(() => endsWith('', 'abc')).to.throw(/^endsWith requires a 'mightEndWithThis' string of length >= 1/);
     });
 
+    test('isMatch', () => {
+      isMatch(/a/, 'bab').should.be.true;
+      isMatch(/a/, 'bob').should.be.false;
+    });
+
     test('prepend', () => {
       prepend('a', 'b').should.equal('ab');
+    });
+
+    test('repeat', () => {
+      repeat(3, 'a').should.equal('aaa');
+      repeat(2, 'ab').should.equal('abab');
     });
 
     test('startsWith', () => {
@@ -947,99 +1502,113 @@ suite('fxns', () => {
       expect(() => startsWith('', 'abc')).to.throw(/^startsWith requires a 'mightStartWithThis' string of length >= 1/);
     });
 
-    test('trim', () => {
-      trim('a', 'bab').should.equal('bab');
-      trim('a', 'aba').should.equal('b');
-      trim('a', 'aaa').should.equal('');
-      expect(() => trim('', 'aaa')).to.throw(/^trim requires the first argument to be a single character/);
+    test('trimChar', () => {
+      trimChar('a', 'bab').should.equal('bab');
+      trimChar('a', 'aba').should.equal('b');
+      trimChar('a', 'aaa').should.equal('');
     });
 
-    test('trimEnd', () => {
-      trimEnd('a', 'bab').should.equal('bab');
-      trimEnd('a', 'aba').should.equal('ab');
-      trimEnd('a', 'aaa').should.equal('');
-      expect(() => trimEnd('', 'aaa')).to.throw(/^trimEnd requires the first argument to be a single character/);
+    test('trimEndChar', () => {
+      trimEndChar('a', 'bab').should.equal('bab');
+      trimEndChar('a', 'aba').should.equal('ab');
+      trimEndChar('a', 'aaa').should.equal('');
     });
 
-    test('trimStart', () => {
-      trimStart('a', 'bab').should.equal('bab');
-      trimStart('a', 'aba').should.equal('ba');
-      trimStart('a', 'aaa').should.equal('');
-      expect(() => trimStart('', 'aaa')).to.throw(/^trimStart requires the first argument to be a single character/);
+    test('trimEndWhile', () => {
+      const isA = isMatch(/a/);
+      trimEndWhile(isA, 'bab').should.equal('bab');
+      trimEndWhile(isA, 'aba').should.equal('ab');
+      trimEndWhile(isA, 'aaa').should.equal('');
     });
-  });
 
-  suite('set', () => {
-    test('findFirstValueIn', () => {
-      findFirstValueIn(
-        new Set([1, 2])
-        , new Set([2, 1])
-      ).should.equal(2);
+    test('trimStartChar', () => {
+      trimStartChar('a', 'bab').should.equal('bab');
+      trimStartChar('a', 'aba').should.equal('ba');
+      trimStartChar('a', 'aaa').should.equal('');
+    });
 
-      findFirstValueIn(
-        new Set([1, 2])
-        , new Set([3, 2])
-      ).should.equal(2);
+    test('trimStartWhile', () => {
+      const isA = isMatch(/a/);
+      trimStartWhile(isA, 'bab').should.equal('bab');
+      trimStartWhile(isA, 'aba').should.equal('ba');
+      trimStartWhile(isA, 'aaa').should.equal('');
+    });
 
-      expect(
-        findFirstValueIn(
-          new Set([1, 2])
-          , new Set([4, 3])
-        )
-      ).to.be.undefined;
+    test('trimWhile', () => {
+      const isA = isMatch(/a/);
+      trimWhile(isA, 'bab').should.equal('bab');
+      trimWhile(isA, 'aba').should.equal('b');
+      trimWhile(isA, 'aaa').should.equal('');
+    });
+
+    test('wrap', () => {
+      wrap('b', 'a').should.equal('bab');
+      wrap('ba', 'ca').should.equal('bacaba');
     });
   });
 
   suite('utils', () => {
     test('adhere', () => {
       const person = {
-        name: 'phil'
+        name: 'matt'
         , getName() { return this.name; }
       };
       const getName = adhere('getName', person);
-      getName().should.equal('phil');
+      getName().should.equal('matt');
     });
 
     test('adhereEach', () => {
       const person = {
-        name: 'phil'
+        name: 'matt'
         , getName() { return this.name; }
         , screamName() { return this.name + '!'; }
       };
 
       const { getName, screamName } = adhereEach(['getName', 'screamName'], person);
-      getName().should.equal('phil');
-      screamName().should.equal('phil!');
+      getName().should.equal('matt');
+      screamName().should.equal('matt!');
     });
 
     test('adhereOwnEnumerable', () => {
       const person = {
-        name: 'phil'
+        name: 'matt'
         , getName() { return this.name; }
         , screamName() { return this.name + '!'; }
       };
 
       const adheredPerson = adhereOwnEnumerable(person);
 
-      deepEql(
-        keys(adheredPerson)
-        , new Set(['getName', 'screamName'])
-      ).should.be.true;
-      adheredPerson.getName().should.equal('phil');
-      adheredPerson.screamName().should.equal('phil!');
-    });
-
-    test('alwaysReturn', () => {
-      const obj = {};
-      expect(alwaysReturn()()).to.be.undefined;
-      alwaysReturn(1)().should.equal(1);
-      alwaysReturn(obj)().should.equal(obj);
+      arrayOfKeys(adheredPerson).should.deep.equal(['getName', 'screamName']);
+      adheredPerson.getName().should.equal('matt');
+      adheredPerson.screamName().should.equal('matt!');
     });
 
     test('apply', () => {
       const add = curry((a, b) => a + b);
       apply([1, 2], add).should.equal(3);
       apply([1], add)(2).should.equal(3);
+    });
+
+    test('construct', () => {
+      function Person(name, age) {
+        mMerge(this, { name, age });
+      }
+
+      construct(Person, ['matt', 27]).should.deep.equal({
+        name: 'matt'
+        , age: 27
+      });
+    });
+
+    test('constructN1', () => {
+      function Person(toMerge) {
+        mMerge(this, toMerge);
+      }
+
+      constructN1(Person, { name: 'matt', age: 27 }).should.deep.equal({
+        name: 'matt'
+        , age: 27
+      });
     });
 
     test('eachOffset', () => {
@@ -1058,80 +1627,45 @@ suite('fxns', () => {
       ]);
     });
 
-    test('flip', () => {
-      const myConcat = (left, right) => left.concat(right)
-        , myPrepend = flip(myConcat);
-
-      myPrepend([1], [2]).should.deep.equal([2, 1]);
-    });
-
-    test('get', () => {
-      const person = {
-        name: 'phil'
-      };
-      get('name', person).should.equal('phil');
-      expect(get("doesn't exist", person)).to.be.undefined;
-      expect(get('name', undefined)).to.be.undefined;
+    test('fromPairs', () => {
+      fromPairs([['one', 1], ['two', '2']])
+        .should.deep.equal({ one: 1, two: '2' });
     });
 
     test('getAtPath', () => {
       const deepPerson = {
         deeper: {
-          name: 'phil'
+          name: 'matt'
         }
       };
 
-      getAtPath(['deeper'], deepPerson).should.deep.equal({ name: 'phil' });
-      getAtPath(['deeper', 'name'], deepPerson).should.equal('phil');
+      getAtPath(['deeper'], deepPerson).should.deep.equal({ name: 'matt' });
+      getAtPath(['deeper', 'name'], deepPerson).should.equal('matt');
       expect(getAtPath(["doesn't exist"], deepPerson)).to.be.undefined;
       expect(getAtPath(['deeper', 'name'], undefined)).to.be.undefined;
     });
 
     test('getEq', () => {
       const person = {
-        name: 'phil'
+        name: 'matt'
       };
-      getEq('name', 'phil', person).should.be.true;
+      getEq('name', 'matt', person).should.be.true;
       expect(getEq("doesn't exist", 'anything could be here', person)).to.be.undefined;
-      getEq('name', 'not phil', person).should.be.false;
+      getEq('name', 'not matt', person).should.be.false;
     });
 
-    test('getFirst', () => {
-      const car = {
-        name: 'bessy'
-        , make: 'toyota'
-      };
-      getFirst(['name', 'make'], car).should.equal('bessy');
-      getFirst(['make', 'name'], car).should.equal('toyota');
-      getFirst(["doesn't exist", 'name'], car).should.equal('bessy');
-      expect(getFirst(["doesn't exist"], car)).to.be.undefined;
-    });
-
-    test('getFrom', () => {
+    test('getOr', () => {
       const person = {
-        name: 'phil'
+        name: 'matt'
       };
-      getFrom(person, 'name').should.equal('phil');
-      expect(getFrom(undefined, 'name')).to.be.undefined;
-      expect(getFrom(person, "doesn't exist")).to.be.undefined;
-    });
-
-    test('hasKey', () => {
-      const person = {
-        name: 'phil'
-      };
-      hasKey('name', person).should.be.true;
-      hasKey("doesn't exist", person).should.be.false;
-
-      // doesn't have to be enumerable
-      hasKey('toString', true).should.be.true;
-      hasKey("doesn't exist", true).should.be.false;
+      getOr('name', 'default', person).should.equal('matt');
+      getOr('age', 0, person).should.equal(0);
     });
 
     test('hasPath', () => {
       const deepPerson = {
         deeper: {
-          name: 'phil'
+          name: 'matt'
         }
       };
 
@@ -1162,11 +1696,36 @@ suite('fxns', () => {
 
     test('invoke', () => {
       const person = {
-        name: 'phil'
+        name: 'matt'
         , getName() { return this.name; }
       };
-      invoke('getName', person).should.equal('phil');
+      invoke('getName', person).should.equal('matt');
       expect(invoke("doesn't exist", person)).to.be.undefined;
+    });
+
+    test('invokeAtPath', () => {
+      const people = {
+        matt: {
+          name: 'matt'
+          , getName() { return this.name; }
+        }
+      };
+      invokeAtPath(['matt', 'getName'], people).should.equal('matt');
+      expect(invokeAtPath(['phil', "doesn't exist"], people)).to.be.undefined;
+    });
+
+    test('invokeAtPathWith', () => {
+      const people = {
+        matt: {
+          name: 'matt'
+          , doChore(aChore) { return `I will do ${aChore} immediately sir!`; }
+        }
+      };
+      invokeAtPathWith(['matt', 'doChore'], ['the dishes'], people)
+        .should.equal('I will do the dishes immediately sir!');
+      expect(
+        invokeAtPathWith(['phil', "doesn't exist"], ['the dishes'], people)
+      ).to.be.undefined;
     });
 
     test('invokeWith', () => {
@@ -1209,12 +1768,6 @@ suite('fxns', () => {
       isEmpty(null).should.be.true;
     });
 
-    test('isType', () => {
-      isType('String', '1').should.be.true;
-      isType('String', 1).should.be.false;
-      isType('Number', 1).should.be.true;
-    });
-
     test('isUndefined', () => {
       isUndefined(undefined).should.be.true;
       isUndefined('').should.be.false;
@@ -1240,31 +1793,6 @@ suite('fxns', () => {
       isLaden(null).should.be.false;
     });
 
-    test('keys', () => {
-      deepEql(
-        keys({ one: 1 })
-        , new Set(['one'])
-      ).should.be.true;
-
-      deepEql(
-        keys(new Map([['one', 1]]))
-        , new Set(['one'])
-      ).should.be.true;
-
-      expect(() => keys([1])).to.throw(/^invalid type passed/);
-    });
-
-    test('mSet', () => {
-      const obj = {};
-      mSet(
-        'one'
-        , 1
-        , obj
-      ).should.deep.equal({ one: 1 });
-
-      obj.should.deep.equal({ one: 1 });
-    });
-
     test('noop', () => {
       expect(noop()).to.be.undefined;
       expect(noop(1)).to.be.undefined;
@@ -1275,17 +1803,33 @@ suite('fxns', () => {
       not(strictEquals(1), 2).should.be.true;
     });
 
+    test('pAllSettled', () => {
+      const passFail = [Promise.resolve('pass'), Promise.reject('fail')];
+
+      return pAllSettled(passFail)
+        .should.become([
+          {
+            value: 'pass'
+            , status: 'resolved'
+          }, {
+            value: 'fail'
+            , status: 'rejected'
+          }
+        ]);
+    });
+
     test('pCatch', () => {
-      const p1 = pipe(
-        [
+      const p1 = passThrough(
+        10
+        , [
           delay
           , then(() => { throw new Error("whoa there"); })
         ]
-        , 10
       ).should.be.rejectedWith('whoa there');
 
-      const p2 = pipe(
-        [
+      const p2 = passThrough(
+        10
+        , [
           delay
           , then(() => { throw new Error('whoa there'); })
           , pCatch(e => {
@@ -1294,19 +1838,60 @@ suite('fxns', () => {
             return 'got there';
           })
         ]
-        , 10
       ).should.eventually.equal('got there');
 
       return Promise.all([p1, p2]);
     });
 
-    test('ph', () => {
-      const subtract = curry(
-          (left, right) => left - right
-        )
-        , subtract2from = subtract(ph, 2);
+    test('pProps', () => {
+      const resolveStringToNumber = {
+        'one': Promise.resolve(1)
+        , 'two': Promise.resolve('2')
+      };
 
-      subtract2from(3).should.equal(1);
+      return pProps(resolveStringToNumber)
+        .should.become({ one: 1, two: '2' });
+    });
+
+    test('pPropsSettled', () => {
+      const passFail = {
+        pass: Promise.resolve('pass')
+        , fail: Promise.reject('fail')
+      };
+
+      return pPropsSettled(passFail)
+        .should.become({
+          pass: {
+            value: 'pass'
+            , status: 'resolved'
+          }
+          , fail: {
+            value: 'fail'
+            , status: 'rejected'
+          }
+        });
+    });
+
+    test('pReflect', () => {
+      const anError = 'an error'
+        , success = 'success'
+        ;
+
+      return Promise.all([
+          pReflect(Promise.resolve(success))
+          , pReflect(Promise.reject(anError))
+        ])
+        .should.become([
+          { status: 'resolved', value: 'success' }
+          , { status: 'rejected', value: 'an error' }
+        ]);
+    });
+
+    test('pReject', () => {
+      const anError = 'an error';
+      return pReject(anError)
+        .catch(identity)
+        .should.become(anError);
     });
 
     test('setAtPath', () => {
@@ -1317,26 +1902,6 @@ suite('fxns', () => {
       ).to.throw('setAtPath was given a path containing an unassignable key');
     });
 
-    test('size', () => {
-      size({}).should.equal(0);
-      size({ one: 1 }).should.equal(1);
-
-      size(new Map()).should.equal(0);
-      size(new Map([['one', 1]])).should.equal(1);
-
-      size([]).should.equal(0);
-      size([1]).should.equal(1);
-
-      size(new Set()).should.equal(0);
-      size(new Set([1])).should.equal(1);
-
-      size('').should.equal(0);
-      size('1').should.equal(1);
-
-      size(undefined).should.equal(0);
-      size(null).should.equal(0);
-    });
-
     test('strictEquals', () => {
       strictEquals(1, 1).should.be.true;
       strictEquals(2, 1).should.be.false;
@@ -1344,23 +1909,18 @@ suite('fxns', () => {
     });
 
     test('then', () => {
-      return pipe(
-        [
+      return passThrough(
+        10
+        , [
           delay
           , then(alwaysReturn('got here'))
         ]
-        , 10
       ).should.eventually.equal('got here');
     });
 
     test('toBoolean', () => {
       toBoolean('').should.be.false;
       toBoolean('1').should.be.true;
-    });
-
-    test('values', () => {
-      values({ one: 1, two: 2 }).should.deep.equal([1, 2]);
-      values(new Map([['one', 1], ['two', 2]])).should.deep.equal([1, 2]);
     });
   });
 });
@@ -1372,17 +1932,17 @@ suite('fxns', () => {
 
 function requireAll(arr) {
   return mMap(
-    el => require('../lib/fxns/' + el)
+    el => require('../lib/fxns/' + kebabCase(el))
     , arr
   );
 }
 
-function delay(ms) {
-  return bPromise.delay(ms);
-}
-
 function isOdd(num) {
   return num % 2;
+}
+
+function isEven(num) {
+  return !(num % 2);
 }
 
 function createArgCollector() {

@@ -5,8 +5,9 @@
 // Imports //
 //---------//
 
-const getNodeFsResolver = require('./lib/resolvers/node-fs')
-  , getJsenvelop = require('./lib/get-jsenvelop')
+const createServerFsLocator = require('./lib/factories/locators/server-fs')
+  , createNodeLocator = require('./lib/factories/locators/node')
+  , createJsenvelop = require('./lib/factories/jsenvelop')
   ;
 
 
@@ -14,4 +15,6 @@ const getNodeFsResolver = require('./lib/resolvers/node-fs')
 // Exports //
 //---------//
 
-module.exports = getJsenvelop({ fsResolver: getNodeFsResolver() });
+module.exports = createJsenvelop({
+  locators: [createNodeLocator(), createServerFsLocator()]
+});

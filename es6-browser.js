@@ -1,13 +1,10 @@
-'use strict';
-
-
 //---------//
 // Imports //
 //---------//
 
-const getBrowserFsResolver = require('./lib/resolvers/browser-fs')
-  , getJsenvelop = require('./lib/get-jsenvelop')
-  , MemFs = require('./lib/models/mem-fs')
+const createBrowserFsLocator = require('./lib/factories/locators/browser-fs')
+  , createJsenvelop = require('./lib/factories/jsenvelop')
+  , sMemFs = require('./lib/services/mem-fs')
   ;
 
 
@@ -15,11 +12,13 @@ const getBrowserFsResolver = require('./lib/resolvers/browser-fs')
 // Main //
 //------//
 
-const browserFsResolver = getBrowserFsResolver({ memFsInst: new MemFs() });
+const browserFs = createBrowserFsLocator({ memFsInst: sMemFs.create() })
+  , jsenvelop = createJsenvelop({ locators: [browserFs] })
+  ;
 
 
 //---------//
 // Exports //
 //---------//
 
-module.exports = getJsenvelop({ fsResolver: browserFsResolver });
+module.exports = jsenvelop;
